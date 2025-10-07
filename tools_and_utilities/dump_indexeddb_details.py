@@ -24,10 +24,17 @@ import sys
 import pathlib
 from ccl_chromium_reader import ccl_chromium_indexeddb
 
+def bad_deserializer_data_handler(key: ccl_chromium_indexeddb.IdbKey, buffer: bytes):
+  print(f"Error reading IndexedDb record {key}", file=sys.stderr)
 
 def main(args):
     ldb_path = pathlib.Path(args[0])
-    wrapper = ccl_chromium_indexeddb.WrappedIndexDB(ldb_path)
+    if len(args)>=2:
+      blob_path = pathlib.Path(args[1])
+    else:
+      blob_path = None
+
+    wrapper = ccl_chromium_indexeddb.WrappedIndexDB(ldb_path, blob_path)
 
     for db_info in wrapper.database_ids:
         db = wrapper[db_info.dbid_no]
@@ -38,15 +45,13 @@ def main(args):
         for obj_store_name in db.object_store_names:
             obj_store = db[obj_store_name]
             print(f"\tobject_store_id={obj_store.object_store_id}; name={obj_store.name}")
-            try:
-                one_record = next(obj_store.iterate_records())
-            except StopIteration:
-                one_record = None
-            if one_record is not None:
-                print("\tExample record:")
+
+            count=0
+            for one_record in obj_store.iterate_records( bad_deserializer_data_handler=bad_deserializer_data_handler ):
                 print(f"\tkey: {one_record.key}")
                 print(f"\tvalue: {one_record.value}")
-            else:
+                count+=1
+            if count == 0:
                 print("\tNo records")
             print()
         print()
@@ -54,6 +59,6 @@ def main(args):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print(f"USAGE: {pathlib.Path(sys.argv[0]).name} <ldb dir path>")
+        print(f"USAGE: {pathlib.Path(sys.argv[0]).name} <ldb dir path> [<blob dir path>]")
         exit(1)
     main(sys.argv[1:])
